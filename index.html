@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Цепная реакция 3D: Планета (Babylon.js)</title>
+    <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none; /* Предотвращает прокрутку на мобильных */
+            /* Изначально скрыт, будет показан JS */
+            display: none;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 1.2em;
+            background: rgba(0,0,0,0.6);
+            padding: 10px 15px;
+            border-radius: 8px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 150px;
+            /* Изначально скрыт, будет показан JS */
+            display: none;
+        }
+        .player-status-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .player-status-dot {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+        .active-player-dot {
+            border: 3px solid yellow; /* Обводка для активного игрока */
+            box-shadow: 0 0 10px yellow; /* Сияние для активного игрока */
+        }
+        #restart-button {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 25px;
+            font-size: 1.2em;
+            background-color: #4CAF50; /* Зеленая кнопка */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            z-index: 100;
+            display: none; /* Скрыта по умолчанию */
+        }
+        #restart-button:hover {
+            background-color: #45a049;
+            transform: translateX(-50%) scale(1.05);
+        }
+        #player-count-input-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            z-index: 200;
+            box-shadow: 0 0 20px rgba(0,255,255,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        #player-count-input-container label {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 5px cyan;
+        }
+        #player-count-input {
+            width: 80px;
+            padding: 10px;
+            font-size: 1.2em;
+            border-radius: 5px;
+            border: 1px solid #333;
+            background-color: #222;
+            color: white;
+            text-align: center;
+        }
+        #start-game-button {
+            padding: 15px 30px;
+            font-size: 1.3em;
+            background-color: #007BFF; /* Синяя кнопка */
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.4);
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        #start-game-button:hover {
+            background-color: #0056b3;
+            transform: scale(1.05);
+        }
+        .message-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-size: 3em;
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.8);
+            z-index: 1000;
+            pointer-events: none; /* Пропускает клики */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .message-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .message-overlay span {
+            margin-bottom: 20px;
+        }
+        .message-overlay button {
+            padding: 15px 30px;
+            font-size: 1.5em;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            pointer-events: auto; /* Включаем клики для кнопки */
+        }
+        .message-overlay button:hover {
+            background-color: #5a6268;
+        }
+    </style>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://cdn.babylonjs.com/materialsLibrary/babylon.materials.min.js"></script>
+    <script src="https://cdn.babylonjs.com/v5.0.0/Cameras/babylon.camera.inputs.js"></script>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="info"></div>
+    <button id="restart-button">Начать заново</button>
+
+    <div id="player-count-input-container">
+        <label for="player-count-input">Количество игроков (2-6):</label>
+        <input type="number" id="player-count-input" value="2" min="2" max="6">
+        <button id="start-game-button">Начать игру</button>
+    </div>
+
+    <div id="message-overlay" class="message-overlay">
+        <span id="overlay-text"></span>
+        <button id="overlay-restart-button">Начать заново</button>
+    </div>
+
+    <script>
+        // --- Основные параметры Babylon.js ---
+        let canvas = document.getElementById("renderCanvas");
+        let engine = null; // Инициализируем engine здесь
+        let scene;
+        let planetMesh, cells = [], cellMeshes = [];
+        let currentIntersected = null; // Для отслеживания подсвеченной ячейки
+        let camera = null; // Добавим переменную для камеры
+
+        const playerColors = [
+            BABYLON.Color3.Red(),   // Красный (Player 1)
+            BABYLON.Color3.Green(), // Зеленый (Player 2)
+            BABYLON.Color3.Blue(),  // Синий (Player 3)
+            BABYLON.Color3.Yellow(),// Желтый (Player 4)
+            BABYLON.Color3.Purple(),// Пурпурный (Player 5)
+            BABYLON.Color3.Teal()   // Голубой (Player 6)
+        ];
+        const CELL_RADIUS = 0.5; // Радиус сферы-ячейки
+        const SPHERE_RADIUS = 5; // Радиус главной сферы
+        const BALL_DIAMETER = CELL_RADIUS / 2; // Уменьшенный размер шаров
+        const CELL_CAPACITY = 4; // Количество шаров для взрыва
+        const ANIMATION_DURATION = 200; // Продолжительность анимации в ms
+        const EXPLOSION_SCALE_FACTOR = 1.5; // Насколько увеличивается ячейка при взрыве
+
+        // --- Переменные состояния игры ---
+        let players = [];
+        let currentPlayerIndex = 0;
+        let gameActive = false;
+        let numPlayers = 2; // Количество игроков по умолчанию
+
+        // --- UI элементы ---
+        const infoPanel = document.getElementById('info');
+        const restartButton = document.getElementById('restart-button');
+        const playerCountInputContainer = document.getElementById('player-count-input-container');
+        const playerCountInput = document.getElementById('player-count-input');
+        const startGameButton = document.getElementById('start-game-button');
+        const messageOverlay = document.getElementById('message-overlay');
+        const overlayText = document.getElementById('overlay-text');
+        const overlayRestartButton = document.getElementById('overlay-restart-button');
+
+        // --- Звуки ---
+        function playSound(type) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                switch (type) {
+                    case 'place':
+                        oscillator.type = 'sine';
+                        oscillator.frequency.value = 800;
+                        gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.3);
+                        break;
+                    case 'explode':
+                        oscillator.type = 'square';
+                        oscillator.frequency.value = 200;
+                        gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+                        break;
+                    case 'win':
+                        oscillator.type = 'sine';
+                        oscillator.frequency.value = 1046.50; // High C
+                        gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+                        gainNode.gain.linearRampToValueAtTime(0.00001, ctx.currentTime + 1.0);
+                        break;
+                    case 'lose':
+                        oscillator.type = 'triangle';
+                        oscillator.frequency.value = 110.00; // Low A
+                        gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+                        gainNode.gain.linearRampToValueAtTime(0.00001, ctx.currentTime + 1.0);
+                        break;
+                    default:
+                        oscillator.stop();
+                        return;
+                }
+
+                oscillator.start();
+                oscillator.stop(ctx.currentTime + 0.8);
+            } catch (e) {
+                console.log('Web Audio API не поддерживается или произошла ошибка при воспроизведении звука:', e);
+            }
+        }
+
+        // --- Инициализация сцены Babylon.js ---
+        function createScene() {
+            // Убеждаемся, что engine инициализирован
+            if (!engine) {
+                engine = new BABYLON.Engine(canvas, true);
+            }
+
+            scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color4(0.05, 0.05, 0.1, 1); // Темный фон
+
+            // Камера
+            camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2, SPHERE_RADIUS * 2, BABYLON.Vector3.Zero(), scene);
+            camera.setTarget(BABYLON.Vector3.Zero());
+            
+            // Отключаем автоматическое управление вращением
+            camera.inputs.clear(); // Очищаем все стандартные входы
+            
+            // Добавляем только необходимые входы: зум и панорамирование
+            camera.inputs.addMouseWheel(); // Зум колесом мыши
+            
+            // Pinch-to-zoom для тач-скринов
+            camera.inputs.add(new BABYLON.ArcRotateCameraPinchZoom()); 
+            
+            // PointersInput для панорамирования (перетаскивания)
+            const pointersInput = new BABYLON.ArcRotateCameraPointersInput();
+            pointersInput.buttons = [0, 1, 2]; // Разрешить все кнопки мыши
+            pointersInput.panningSensibility = 250; // Чувствительность панорамирования
+            pointersInput.angularSensibilityX = Infinity; // Отключить вращение по X
+            pointersInput.angularSensibilityY = Infinity; // Отключить вращение по Y
+            camera.inputs.add(pointersInput);
+
+            camera.attachControl(canvas, true); // Прикрепляем управление к canvas, но уже после настройки inputs
+
+            camera.lowerRadiusLimit = SPHERE_RADIUS * 1.2;
+            camera.upperRadiusLimit = SPHERE_RADIUS * 4;
+            camera.pinchPrecision = 200 / camera.radius; // Улучшить pinch zoom на мобильных
+
+
+            // Свет
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.7; // Мягкий рассеянный свет
+            const directionalLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(5, 10, 7.5), scene);
+            directionalLight.intensity = 1.5; // Направленный свет
+
+            // Главный цикл рендеринга
+            engine.runRenderLoop(() => {
+                scene.render();
+            });
+
+            // Обработка изменения размера окна
+            window.addEventListener("resize", () => {
+                engine.resize();
+            });
+
+            // Обработка кликов
+            scene.onPointerObservable.add((pointerInfo) => {
+                switch (pointerInfo.type) {
+                    case BABYLON.PointerEventTypes.POINTERDOWN:
+                        if (gameActive && pointerInfo.pickInfo.hit && pointerInfo.pickInfo.pickedMesh.name.startsWith("cell_")) {
+                            const clickedCellMesh = pointerInfo.pickInfo.pickedMesh;
+                            const clickedCellId = clickedCellMesh.metadata.id;
+                            const clickedCell = cells.find(c => c.id === clickedCellId);
+
+                            if (clickedCell) {
+                                // Клик по ячейке: если она пуста или принадлежит текущему игроку
+                                if (clickedCell.owner === null || clickedCell.owner === players[currentPlayerIndex].id) {
+                                    clickedCell.addBall(players[currentPlayerIndex]);
+                                    switchPlayer(); // Передаем ход
+                                }
+                            }
+                        }
+                        break;
+                    case BABYLON.PointerEventTypes.POINTERMOVE:
+                        if (!gameActive) return;
+                        if (currentIntersected) {
+                            currentIntersected.renderOutline = false;
+                            currentIntersected = null;
+                        }
+                        if (pointerInfo.pickInfo.hit && pointerInfo.pickInfo.pickedMesh.name.startsWith("cell_")) {
+                            currentIntersected = pointerInfo.pickInfo.pickedMesh;
+                            currentIntersected.renderOutline = true;
+                            currentIntersected.outlineColor = BABYLON.Color3.Teal();
+                            currentIntersected.outlineWidth = 0.05;
+                        }
+                        break;
+                    case BABYLON.PointerEventTypes.POINTEROUT:
+                        if (currentIntersected) {
+                            currentIntersected.renderOutline = false;
+                            currentIntersected = null;
+                        }
+                        break;
+                }
+            });
+
+            scene.autoClear = false;
+
+            return scene;
+        }
+
+        // --- Логика игры ---
+
+        class Cell {
+            constructor(id, position, neighbors) {
+                this.id = id;
+                this.position = position; // BABYLON.Vector3
+                this.owner = null; // null или id игрока
+                this.balls = 0; // Количество шаров в ячейке
+                this.neighbors = neighbors; // Массив id соседних ячеек
+                this.mesh = null; // BABYLON.Mesh для визуализации ячейки
+                this.ballMeshes = []; // Массив BABYLON.Mesh для визуализации шаров
+            }
+
+            addBall(player) {
+                // Если ячейка не принадлежит никому или принадлежит текущему игроку
+                if (this.owner === null || this.owner === player.id) {
+                    this.owner = player.id;
+                    this.balls++;
+                    this.updateVisuals(player.color);
+                    this.addBallVisual(player.color);
+                } else {
+                    // Если ячейка принадлежит противнику, уменьшаем его шары
+                    this.balls--;
+                    this.removeBallVisual();
+                    if (this.balls < 0) {
+                        // Если шары противника закончились, ячейка переходит к текущему игроку
+                        this.owner = player.id;
+                        this.balls = Math.abs(this.balls); // Становится 1 шар текущего игрока
+                        this.updateVisuals(player.color);
+                        this.addBallVisual(player.color); // Добавляем новый шар
+                    }
+                }
+                playSound('place');
+
+                if (this.balls >= CELL_CAPACITY && this.owner === player.id) {
+                    // Задержка перед взрывом для анимации добавления шара
+                    setTimeout(() => this.explode(player), ANIMATION_DURATION + 50);
+                }
+            }
+
+            updateVisuals(color) {
+                if (!this.mesh) return;
+                const material = this.mesh.material;
+                const targetColor = color.toLinearSpace();
+                BABYLON.Animation.CreateAndStartAnimation(
+                    "colorChange", material, "diffuseColor", ANIMATION_DURATION, 60,
+                    material.diffuseColor.clone(), targetColor,
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                    new BABYLON.QuadraticEase()
+                );
+                this.mesh.metadata.ownerId = this.owner;
+            }
+
+            addBallVisual(color) {
+                const ballMesh = BABYLON.MeshBuilder.CreateSphere("ball", { diameter: BALL_DIAMETER }, scene); // Используем уменьшенный диаметр
+                ballMesh.position.copyFrom(this.position);
+                ballMesh.scaling = new BABYLON.Vector3(0.1, 0.1, 0.1); // Начинаем маленьким
+                ballMesh.name = "player_ball"; // Даем имя для удобства идентификации
+                const ballMaterial = new BABYLON.StandardMaterial("ballMat", scene);
+                ballMaterial.diffuseColor = color;
+                ballMaterial.specularColor = BABYLON.Color3.Black(); // Убираем блеск
+                ballMaterial.freeze(); // Оптимизация
+                ballMesh.material = ballMaterial;
+                this.ballMeshes.push(ballMesh);
+
+                // Анимируем появление шара и его расположение
+                BABYLON.Animation.CreateAndStartAnimation(
+                    "ballScale", ballMesh, "scaling", ANIMATION_DURATION, 60,
+                    new BABYLON.Vector3(0.1, 0.1, 0.1), new BABYLON.Vector3(1, 1, 1),
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                    new BABYLON.BackEase(2)
+                );
+
+                const updateBallPositions = () => {
+                    const count = this.ballMeshes.length;
+                    const angleStep = (Math.PI * 2) / count;
+                    this.ballMeshes.forEach((ball, i) => {
+                        const angle = angleStep * i;
+                        const xOffset = Math.cos(angle) * CELL_RADIUS * 0.3;
+                        const zOffset = Math.sin(angle) * CELL_RADIUS * 0.3;
+
+                        // Вычисляем смещение на поверхности сферы
+                        const directionFromCenter = this.position.normalize();
+                        // Создаем два перпендикулярных вектора на касательной плоскости
+                        let rightVector = BABYLON.Vector3.Cross(directionFromCenter, BABYLON.Vector3.Up());
+                        if (rightVector.length() < 0.001) { // Если vector.Up() и normal коллинеарны (полюс)
+                            rightVector = BABYLON.Vector3.Cross(directionFromCenter, BABYLON.Vector3.Right());
+                        }
+                        rightVector.normalize();
+                        const forwardVector = BABYLON.Vector3.Cross(rightVector, directionFromCenter).normalize();
+
+                        const offsetVector = rightVector.scale(xOffset).add(forwardVector.scale(zOffset)).add(directionFromCenter.scale(CELL_RADIUS * 0.3));
+                        const targetPosition = this.position.add(offsetVector);
+
+                        BABYLON.Animation.CreateAndStartAnimation(
+                            "ballPos", ball, "position", ANIMATION_DURATION, 60,
+                            ball.position.clone(), targetPosition,
+                            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                            new BABYLON.QuadraticEase()
+                        );
+                    });
+                };
+                setTimeout(updateBallPositions, ANIMATION_DURATION);
+            }
+
+            removeBallVisual() {
+                if (this.ballMeshes.length > 0) {
+                    const ballMesh = this.ballMeshes.pop();
+                    BABYLON.Animation.CreateAndStartAnimation(
+                        "ballShrink", ballMesh, "scaling", ANIMATION_DURATION, 60,
+                        ballMesh.scaling.clone(), new BABYLON.Vector3(0.1, 0.1, 0.1),
+                        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                        new BABYLON.QuadraticEase(),
+                        () => {
+                            ballMesh.dispose();
+                        }
+                    );
+                }
+            }
+
+            explode(player) {
+                playSound('explode');
+                this.balls = 0; // Ячейка обнуляется после взрыва
+
+                // Анимация взрыва: увеличение и уменьшение самой ячейки
+                const originalScale = this.mesh.scaling.clone();
+                BABYLON.Animation.CreateAndStartAnimation(
+                    "explodeScaleUp", this.mesh, "scaling", ANIMATION_DURATION / 2, 60,
+                    originalScale, originalScale.scale(EXPLOSION_SCALE_FACTOR),
+                    BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                    new BABYLON.QuadraticEase(),
+                    () => {
+                        BABYLON.Animation.CreateAndStartAnimation(
+                            "explodeScaleDown", this.mesh, "scaling", ANIMATION_DURATION / 2, 60,
+                            this.mesh.scaling.clone(), originalScale,
+                            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                            new BABYLON.QuadraticEase()
+                        );
+                    }
+                );
+
+                // Удаляем все визуальные шары с анимацией
+                this.ballMeshes.forEach(ball => {
+                    BABYLON.Animation.CreateAndStartAnimation(
+                        "ballExplode", ball, "scaling", ANIMATION_DURATION, 60,
+                        ball.scaling.clone(), new BABYLON.Vector3(0, 0, 0),
+                        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT,
+                        new BABYLON.QuadraticEase(),
+                        () => {
+                            ball.dispose();
+                        }
+                    );
+                });
+                this.ballMeshes = [];
+
+                // Распространение взрыва на соседей
+                this.neighbors.forEach(neighborId => {
+                    const neighborCell = cells.find(c => c.id === neighborId);
+                    if (neighborCell) {
+                        // При взрыве добавляем 1 шар к соседям
+                        neighborCell.addBall(player);
+                    }
+                });
+
+                // Обновляем визуал ячейки (она становится пустой после взрыва)
+                this.updateVisuals(new BABYLON.Color3(0.2, 0.2, 0.2)); // Возвращаем к базовому серому
+                this.owner = null; // Ячейка становится бесхозной
+
+                setTimeout(checkWinCondition, ANIMATION_DURATION + 100);
+            }
+        }
+
+        // --- Управление игрой ---
+
+        function initGame() {
+            // Если engine уже существует, значит сцена была создана.
+            // Нужно просто сбросить состояние, а не пересоздавать engine и scene.
+            if (engine) {
+                scene.dispose(); // Очищаем старую сцену
+            }
+            scene = createScene(); // Создаем новую сцену для новой игры
+
+            cells = [];
+            cellMeshes = [];
+            players = [];
+            currentPlayerIndex = 0;
+            gameActive = true;
+            infoPanel.innerHTML = '';
+            restartButton.style.display = 'none';
+            messageOverlay.classList.remove('visible');
+            overlayRestartButton.removeEventListener('click', initGame); // Удалить старые слушатели
+            overlayRestartButton.addEventListener('click', initGame); // Добавить новый
+
+            // Создание игроков
+            for (let i = 0; i < numPlayers; i++) {
+                players.push({
+                    id: i,
+                    color: playerColors[i],
+                    active: true,
+                    hasMadeMove: false // Новый флаг для отслеживания первого хода
+                });
+            }
+
+            // Создание 3D сферы (планеты)
+            planetMesh = BABYLON.MeshBuilder.CreateSphere("planet", { diameter: SPHERE_RADIUS * 2, segments: 64 }, scene);
+            const planetMaterial = new BABYLON.PBRMaterial("planetMat", scene);
+            planetMaterial.albedoColor = new BABYLON.Color3(0.5, 0.5, 0.7);
+            planetMaterial.metallic = 0.5;
+            planetMaterial.roughness = 0.5;
+            planetMesh.material = planetMaterial;
+            planetMesh.isPickable = false;
+
+            // Генерация ячеек на поверхности сферы (примерно равномерно)
+            const numCells = 150;
+            const tempPositions = [];
+            for (let i = 0; i < numCells; i++) {
+                const phi = Math.acos(1 - 2 * Math.random());
+                const theta = 2 * Math.PI * Math.random();
+                const x = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
+                const y = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
+                const z = SPHERE_RADIUS * Math.cos(phi);
+                tempPositions.push(new BABYLON.Vector3(x, y, z));
+            }
+
+            // Создаем объекты Cell и их визуализации
+            const cellMaterialBase = new BABYLON.StandardMaterial("cellMatBase", scene);
+            cellMaterialBase.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.2); // Базовый серый цвет для пустых ячеек
+            cellMaterialBase.freeze(); // Оптимизация
+
+            tempPositions.forEach((pos, index) => {
+                const cellMesh = BABYLON.MeshBuilder.CreateSphere(`cell_${index}`, { diameter: CELL_RADIUS * 2, segments: 16 }, scene);
+                cellMesh.position.copyFrom(pos);
+                cellMesh.material = cellMaterialBase.clone(); // Каждая ячейка имеет свой материал для изменения цвета
+                cellMesh.metadata = { id: index, ownerId: null };
+                cellMeshes.push(cellMesh);
+
+                const neighbors = [];
+                tempPositions.forEach((otherPos, otherIndex) => {
+                    // Используем чуть больший порог для определения соседей, чтобы было больше связей
+                    if (index !== otherIndex && BABYLON.Vector3.DistanceSquared(pos, otherPos) < (CELL_RADIUS * 4) * (CELL_RADIUS * 4)) {
+                        neighbors.push(otherIndex);
+                    }
+                });
+                cells.push(new Cell(index, pos, neighbors));
+                cells[index].mesh = cellMesh;
+            });
+
+            updateInfoPanel();
+            highlightCurrentPlayer();
+        }
+
+        function switchPlayer() {
+            // Устанавливаем флаг, что текущий игрок сделал ход, только если он реально кликнул
+            // (это уже происходит в addBall, но важно для hasMadeMove)
+            // Здесь мы только переключаем игрока.
+
+            let nextPlayerFound = false;
+            let originalPlayerIndex = currentPlayerIndex;
+            do {
+                currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+                // Игрок считается активным, если у него есть хотя бы одна ячейка
+                // ИЛИ он еще не делал свой первый ход (позволяет ему сделать стартовый ход)
+                const hasOwnedCells = cells.some(cell => cell.owner === players[currentPlayerIndex].id);
+
+                if (hasOwnedCells) { // Если есть ячейки, он активен
+                    players[currentPlayerIndex].active = true;
+                    nextPlayerFound = true;
+                } else if (!players[currentPlayerIndex].hasMadeMove) { // Если нет ячеек, но еще не делал ход - тоже активен
+                    players[currentPlayerIndex].active = true;
+                    nextPlayerFound = true;
+                } else { // Нет ячеек И уже делал ход = выбыл
+                    players[currentPlayerIndex].active = false;
+                    // playSound('lose'); // Звук проигрыша воспроизводится только один раз в checkWinCondition
+                }
+
+                // Если мы прошли полный круг и нашли только неактивных игроков (кроме, возможно, текущего),
+                // или если остался только один активный игрок.
+                if (currentPlayerIndex === originalPlayerIndex && players.filter(p => p.active).length <= 1) {
+                    break;
+                }
+            } while (!players[currentPlayerIndex].active);
+
+            // Проверка на победу после переключения игрока
+            // Это важно, так как предыдущий ход мог привести к выбыванию игроков
+            const activePlayersAfterTurn = players.filter(p => p.active);
+            if (activePlayersAfterTurn.length <= 1 && gameActive) {
+                checkWinCondition();
+                return;
+            }
+
+            highlightCurrentPlayer();
+            updateInfoPanel();
+        }
+
+
+        function highlightCurrentPlayer() {
+            players.forEach((player, i) => {
+                const playerDot = document.getElementById(`player-dot-${player.id}`);
+                if (playerDot) {
+                    if (i === currentPlayerIndex) {
+                        playerDot.classList.add('active-player-dot');
+                    } else {
+                        playerDot.classList.remove('active-player-dot');
+                    }
+                }
+            });
+        }
+
+        function updateInfoPanel() {
+            infoPanel.innerHTML = '';
+            players.forEach(player => {
+                const ownedCells = cells.filter(cell => cell.owner === player.id).length;
+                const totalBalls = cells.filter(cell => cell.owner === player.id).reduce((sum, cell) => sum + cell.balls, 0);
+
+                const playerStatusDiv = document.createElement('div');
+                playerStatusDiv.className = 'player-status-info';
+                playerStatusDiv.id = `player-status-${player.id}`;
+                const colorHex = player.color.toHexString();
+                playerStatusDiv.innerHTML = `
+                    <div class="player-status-dot" id="player-dot-${player.id}" style="background-color: ${colorHex};"></div>
+                    <span>Игрок ${player.id + 1}: Ячеек: ${ownedCells} | Шаров: ${totalBalls}</span>
+                `;
+                if (!player.active) {
+                    playerStatusDiv.style.opacity = 0.5;
+                }
+                infoPanel.appendChild(playerStatusDiv);
+            });
+
+            highlightCurrentPlayer();
+        }
+
+        function checkWinCondition() {
+            updateInfoPanel(); // Обновляем состояние игроков
+            const activePlayers = players.filter(p => p.active);
+
+            if (activePlayers.length <= 1 && gameActive) {
+                gameActive = false;
+                if (activePlayers.length === 1) {
+                    const winnerPlayer = activePlayers[0];
+                    showOverlay(`Игрок ${winnerPlayer.id + 1} победил!`, winnerPlayer.color.toHexString());
+                    playSound('win');
+                } else {
+                    showOverlay('Ничья!', '#888888'); // Случай, когда все игроки выбыли одновременно
+                }
+                restartButton.style.display = 'block';
+                overlayRestartButton.style.display = 'block';
+            }
+        }
+
+        // --- Управление UI ---
+
+        function showOverlay(text, colorHex) {
+            overlayText.textContent = text;
+            overlayText.style.color = colorHex;
+            messageOverlay.classList.add('visible');
+        }
+
+        restartButton.addEventListener('click', () => {
+            initGame();
+            restartButton.style.display = 'none'; // Скрыть кнопку после перезапуска
+        });
+        overlayRestartButton.addEventListener('click', initGame);
+
+        startGameButton.addEventListener('click', () => {
+            const inputVal = parseInt(playerCountInput.value);
+            if (inputVal >= 2 && inputVal <= 6) {
+                numPlayers = inputVal;
+                // Скрыть меню и показать игровые элементы
+                playerCountInputContainer.style.display = 'none';
+                canvas.style.display = 'block';
+                infoPanel.style.display = 'flex';
+                
+                // Важно: инициализировать engine и scene ТОЛЬКО после того, как canvas стал видимым
+                // Это устраняет возможные проблемы с нулевым размером canvas
+                initGame(); 
+            } else {
+                alert('Пожалуйста, введите число от 2 до 6.');
+            }
+        });
+
+        // Инициализация при загрузке страницы (показываем меню выбора игроков)
+        document.addEventListener('DOMContentLoaded', () => {
+            playerCountInputContainer.style.display = 'flex'; // Показать меню
+            infoPanel.style.display = 'none'; // Скрыть инфо-панель
+            restartButton.style.display = 'none'; // Скрыть кнопку рестарта
+            messageOverlay.classList.remove('visible'); // Скрыть оверлей
+            canvas.style.display = 'none'; // Скрыть canvas, пока игра не началась
+        });
+
+    </script>
+</body>
+</html>
